@@ -444,7 +444,12 @@ def build_prompt(example: Dict) -> str:
 
 def run():
     output = []
+    myStocksGenerator = StocksModule()
+    #
     for example in tqdm(EXAMPLES):
+        stocks_context = myStocksGenerator(example["about_me"])
+        example["context"] = example["context"] + "\n" + stocks_context
+
         prompt = build_prompt(example)
         logger.info(f"{prompt=}")
 

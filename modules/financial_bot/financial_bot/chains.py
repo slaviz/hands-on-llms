@@ -242,7 +242,7 @@ class FinancialBotQAChain(Chain):
         prompt = self.template.format_infer(
             {
                 "user_context": inputs["about_me"],
-                "news_context": inputs["context"] + inputs["stock_prices"],
+                "news_context": inputs["context"] + "\n" + inputs["stock_prices"],
                 "chat_history": inputs["chat_history"],
                 "question": inputs["question"],
             }
