@@ -178,9 +178,6 @@ class StockPricesExtractorChain(Chain):
         return ["stock_prices"]
 
     def _call(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        _, quest_key = self.input_keys
-        question_str = inputs[quest_key]
-
         keys = self.input_keys
         question_str = "\n".join(inputs[key] for key in keys)
 
