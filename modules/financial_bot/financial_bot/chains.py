@@ -15,6 +15,8 @@ from unstructured.cleaners.core import (
 )
 
 from financial_bot.embeddings import EmbeddingModelSingleton
+from financial_bot.stocks import StocksModule
+
 from financial_bot.template import PromptTemplate
 
 
@@ -154,6 +156,65 @@ class ContextExtractorChain(Chain):
 
         return question
 
+class StockPricesExtractorChain(Chain):
+    """
+    Extract Identities and their stock prices from the provided str.
+
+    Attributes:
+    -----------
+    max_identities : int
+        The maximum number of identities stocks' to extract.
+    """
+    stocks_module: StocksModule
+    identities_from_context: bool = False
+    max_identities: int = 5
+
+    @property
+    def input_keys(self) -> List[str]:
+        return ["question"] if not self.identities_from_context else ["context", "question"]
+
+    @property
+    def output_keys(self) -> List[str]:
+        return ["stock_prices"]
+
+    def _call(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        _, quest_key = self.input_keys
+        question_str = inputs[quest_key]
+
+        keys = self.input_keys
+        question_str = "\n".join(inputs[key] for key in keys)
+
+        cleaned_question = self.clean(question_str)
+        # TODO: Instead of cutting the question at 'max_input_length', chunk the question in 'max_input_length' chunks,
+        # pass them through the model and average the embeddings.
+        stocks_info = self.stocks_module(cleaned_question)
+
+        # TODO: Using the metadata, use the filter to take into consideration only the news from the last 24 hours
+        # (or other time frame).
+
+        return {
+            "stock_prices": stocks_info,
+        }
+
+    def clean(self, question: str) -> str:
+        """
+        Clean the input question by removing unwanted characters.
+
+        Parameters:
+        -----------
+        question : str
+            The input question to clean.
+
+        Returns:
+        --------
+        str
+            The cleaned question.
+        """
+        question = clean(question)
+        question = replace_unicode_quotes(question)
+        question = clean_non_ascii_chars(question)
+
+        return question
 
 class FinancialBotQAChain(Chain):
     """This custom chain handles LLM generation upon given prompt"""
@@ -184,7 +245,7 @@ class FinancialBotQAChain(Chain):
         prompt = self.template.format_infer(
             {
                 "user_context": inputs["about_me"],
-                "news_context": inputs["context"],
+                "news_context": inputs["context"] + inputs["stock_prices"],
                 "chat_history": inputs["chat_history"],
                 "question": inputs["question"],
             }

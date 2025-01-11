@@ -12,6 +12,8 @@ VECTOR_DB_SEARCH_TOPK = 1
 LLM_MODEL_ID = "tiiuae/falcon-7b-instruct"
 LLM_QLORA_CHECKPOINT = "iusztinpaul/fin-falcon-7b-lora:1.0.5"
 
+# ==Identity Extraction ==
+IDENTITY_EXTRACTION_MODEL = "gpt-3.5-turbo-instruct"
 
 LLM_INFERNECE_MAX_NEW_TOKENS = 500
 LLM_INFERENCE_TEMPERATURE = 1.0
