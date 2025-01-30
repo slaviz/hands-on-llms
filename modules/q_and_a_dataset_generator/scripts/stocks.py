@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 openai.api_key = os.environ["OPENAI_API_KEY"]
 PROMPT_TEMPLATE = """
-for the prompt below, extract relevant stock identities from the next prompt, any identity that appear in the prompt, or is related in some way should be extract too, the format of extraction should be:
+for the prompt below, extract relevant relevant names of companies that are traded in the stock market from the next prompt, any identity that appear in the prompt, or is related in some way should be extract too, the format of extraction should be:
 {{"identity1": "appears in the prompt",
 "identity2": "is main competitor of identity 1",
 "identity3": "is main supplier of identity 2",

@@ -16,16 +16,16 @@ logger = logging.getLogger(__name__)
 
 openai.api_key = os.environ["OPENAI_API_KEY"]
 PROMPT_TEMPLATE = """
-for the prompt below, extract relevant stock identities from the next prompt, any identity that appear in the prompt, or is related in some way should be extract too, the format of extraction should be:
-{{"identity1": "appears in the prompt",
-"identity2": "is main competitor of identity 1",
-"identity3": "is main supplier of identity 2",
-"identity4": "another relation with identity X"
+for the prompt below, extract relevant names of companies that are traded in the stock market from the next prompt, any company that appear in the prompt, or is related in some way should be extract too, the format of extraction should be:
+{{"company1": "appears in the prompt",
+"company2": "is main competitor of company 1",
+"company3": "is main supplier of company 2",
+"company4": "another relation with company X"
 }}
 
-And so on, to maximum of 5 top related identities to the prompt, not that for each identity should describe it's relevance (it's not necessarily only what is provided in the example, but could be any relation that is deemed important),
-- note that in the dict you should fill in the identity name  as the stock ticker and then its relation
-- Note that in the prompt there may be no identities, at which point you should suggest identities yourself that are related to the question.
+And so on, to maximum of 5 top related companies that are traded in the stock market to the prompt, note that for each company should describe it's relevance (it's not necessarily only what is provided in the example, but could be any relation that is deemed important),
+- note that in the dict you should fill in the company name and then its relation
+- Note that in the prompt there may be no company names, at which point you should suggest companies yourself that are related to the question.
 
 Your response should be sparse and contain only what is requested, be mindful of the amount of text you  respond with, it should be as minimal as possible and be only in the format above as this is part of a code pipeline
 The prompt:
@@ -46,8 +46,48 @@ def post_process_prices(prices):
   prices = (prices - prices[0])/prices[0]
   return np.round(prices, 2)
 
+# Function to calculate metrics
+def calculate_metrics(data):
+    results = {}
+    for stock, metrics in data.items():
+        results[stock] = {}
+        for period, changes in metrics.items():
+            total_change = changes[-1] - changes[0] if len(changes) > 1 else 0.0
+            volatility = np.std(changes) if len(changes) > 1 else 0.0
+            results[stock][period] = {
+                "Net Performance": total_change,
+                "Volatility": volatility
+            }
+    return results
+# Generate insights from metrics
+def generate_insights(metrics, sample_configs):
+    insights = []
+    voo_metrics=metrics["voo"]
+    for period, _, _ in sample_configs:
+        sorted_by_change = sorted(metrics.items(), key=lambda x: x[1][period]["Net Performance"], reverse=True)
+        sorted_by_volatility = sorted(metrics.items(), key=lambda x: x[1][period]["Volatility"], reverse=True)
+
+        top_change = sorted_by_change[0][0]
+        top_volatility = sorted_by_volatility[0][0]
+
+        worst_change = sorted_by_change[-1][0]
+
+        insights.append(
+            f"For {period}, {top_change} had the best net performance, while {top_volatility} showed the highest volatility.")
+        insights.append(f"For {period}, {worst_change} had the worst net performance.")
+
+        for stock, stats in metrics.items():
+            if stock != "voo":
+                comparison = "outperformed" if stats[period]["Net Performance"] > voo_metrics[period][
+                    "Net Performance"] else "underperformed"
+                insights.append(
+                    f"For {period}, {stock} {comparison} the SP500 (voo) with a net performance of {stats[period]['Net Performance']:.2f} compared to {voo_metrics[period]['Net Performance']:.2f}.")
+            return insights
+
 # In case we for some reason can't ask for the company stock name from the chatgpt
 def get_ticker (company_name):
+    if company_name == "voo":
+        return "voo"
     url = "https://query2.finance.yahoo.com/v1/finance/search"
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     params = {"q": company_name, "quotes_count": 1, "country": "United States"}
@@ -64,7 +104,7 @@ def get_performance_summary(company_tickers, sample_configs):
   for company, info in company_tickers.items():
     for sample_period_name, period, interval in sample_configs:
       try:
-          prices = fetch_stock_prices(company, period=period, interval=interval)
+          prices = fetch_stock_prices(get_ticker(company), period=period, interval=interval)
           if company in results:
             results[company][sample_period_name] = post_process_prices(prices)
           else:
@@ -77,13 +117,16 @@ def get_performance_summary(company_tickers, sample_configs):
           else:
             results[company]={sample_period_name: "Not Available"}
 
-  # Display results
-  response_string = ""
-  for company in results.keys():
-    response_string += f"Company: {company}, {company_tickers[company]}\n"
-    for period in results[company].keys():
-      response_string +=f"{period}: {results[company][period]}\n"
-  return response_string
+  metrics = calculate_metrics(results)
+  insights = "".join(generate_insights(metrics, sample_configs))
+
+    # response_string = ""
+  # for company in results.keys():
+  #   response_string += f"Company: {company}, {company_tickers[company]}\n"
+  #   for period in results[company].keys():
+  #     response_string +=f"{period}: {results[company][period]}\n"
+
+  return insights
 
 def ask_gpt(question: str, version_to_use: str="mock"):
     response = {}
@@ -100,8 +143,7 @@ def ask_gpt(question: str, version_to_use: str="mock"):
         prompt = build_prompt(question)
         logger.info(f"{prompt=}")
         openai_response = openai.Completion.create(
-            engine=version_to_use,
-            # "text-davinci-003",    # See: https://github.com/iusztinpaul/hands-on-llms/issues/87
+            engine= version_to_use, # "text-davinci-003",    # See: https://github.com/iusztinpaul/hands-on-llms/issues/87
             prompt=prompt,
             temperature=0,
             max_tokens=100,
@@ -124,9 +166,8 @@ class StocksModule(metaclass=SingletonMeta):
         self,
         identity_extractor_model_name: str = constants.IDENTITY_EXTRACTION_MODEL,
         sample_configs: tuple[tuple[str, str, str], tuple[str, str, str], tuple[str, str, str]]=
-                            (("Hourly changes (Last 24 Hours)", "1d", "1h"),
-                            ("Daily changes (Last Week)", "5d", "1d"),
-                            ("Monthly changes (Last 6 Month)", "6mo", "1mo")),
+                            (("Monthly changes (Last Year)", "1y", "1mo"),
+                            ("Weekly changes (Last week)", "5d", "1d")),
     ):
         """
         Initializes the EmbeddingModelSingleton instance.
@@ -163,6 +204,7 @@ class StocksModule(metaclass=SingletonMeta):
             return ""
         try:
             identities = json.loads(response)
+            identities["voo"] = "sp500 index is golden standard comparison for private investors"
         except Exception:
             logger.error(traceback.format_exc())
             logger.error(
@@ -171,6 +213,7 @@ class StocksModule(metaclass=SingletonMeta):
             return ""
         try:
             result = get_performance_summary(identities, self._sample_configs)
+            logger.info(f"{result}")
         except Exception:
             logger.error(traceback.format_exc())
             logger.error(

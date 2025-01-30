@@ -75,9 +75,8 @@ class FinancialBot:
             cache_dir=model_cache_dir, device=embedding_model_device
         )
         self._identity_extractor_model_name = constants.IDENTITY_EXTRACTION_MODEL
-        self._sample_configs = (("Hourly changes (Last 24 Hours)", "1d", "1h"),
-                          ("Daily changes (Last Week)", "5d", "1d"),
-                          ("Monthly changes (Last 6 Month)", "6mo", "1mo"))
+        self._sample_configs = (("Monthly changes (Last Year)", "1y", "1mo"),
+                                ("Weekly changes (Last Week)", "5d", "1d"))
         self._stocks_module= StocksModule(self._identity_extractor_model_name, self._sample_configs
         )
         self._llm_agent, self._streamer = build_huggingface_pipeline(
