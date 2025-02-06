@@ -186,3 +186,11 @@ logs/
 .DS_Store
 gradio_cached_examples
 trust_policy.json
+modules/financial_bot/.idea/vcs.xml
+modules/financial_bot/.idea/modules.xml
+modules/financial_bot/.idea/inspectionProfiles/Project_Default.xml
+modules/financial_bot/.idea/inspectionProfiles/profiles_settings.xml
+modules/financial_bot/.idea/financial_bot.iml
+modules/financial_bot/.idea/.name
+*.xml
+modules/q_and_a_dataset_generator/.idea/q_and_a_dataset_generator.iml

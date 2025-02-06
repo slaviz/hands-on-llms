@@ -9,6 +9,7 @@ from langchain.memory import ConversationBufferWindowMemory
 from financial_bot import constants
 from financial_bot.chains import (
     ContextExtractorChain,
+    StockPricesExtractorChain,
     FinancialBotQAChain,
     StatelessMemorySequentialChain,
 )
@@ -17,6 +18,8 @@ from financial_bot.handlers import CometLLMMonitoringHandler
 from financial_bot.models import build_huggingface_pipeline
 from financial_bot.qdrant import build_qdrant_client
 from financial_bot.template import get_llm_template
+from financial_bot.stocks import StocksModule
+
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,11 @@ class FinancialBot:
         self._embd_model = EmbeddingModelSingleton(
             cache_dir=model_cache_dir, device=embedding_model_device
         )
+        self._identity_extractor_model_name = constants.IDENTITY_EXTRACTION_MODEL
+        self._sample_configs = (("Monthly changes (Last Year)", "1y", "1mo"),
+                                ("Weekly changes (Last Week)", "5d", "1d"))
+        self._stocks_module= StocksModule(self._identity_extractor_model_name, self._sample_configs
+        )
         self._llm_agent, self._streamer = build_huggingface_pipeline(
             llm_model_id=llm_model_id,
             llm_lora_model_id=llm_qlora_model_id,
@@ -111,7 +119,7 @@ class FinancialBot:
         Notes
         -----
         The actual processing flow within the chain can be visualized as:
-        [about: str][question: str] > ContextChain >
+        [about: str][question: str] > ContextChain > Stock Prices Extraction >
         [about: str][question:str] + [context: str] > FinancialChain >
         [answer: str]
         """
@@ -123,6 +131,14 @@ class FinancialBot:
             vector_collection=self._vector_collection_name,
             top_k=self._vector_db_search_topk,
         )
+
+        logger.info("Building 1.5/3 - StockPricesExtractorChain")
+        stocks_retrieval_chain = StockPricesExtractorChain(
+            stocks_module =  self._stocks_module,
+            identities_from_context = False,
+            max_identities = 5
+        )
+
 
         logger.info("Building 2/3 - FinancialBotQAChain")
         if self._debug:
@@ -158,7 +174,7 @@ class FinancialBot:
                 output_key="answer",
                 k=3,
             ),
-            chains=[context_retrieval_chain, llm_generator_chain],
+            chains=[context_retrieval_chain, stocks_retrieval_chain, llm_generator_chain],
             input_variables=["about_me", "question", "to_load_history"],
             output_variables=["answer"],
             verbose=True,
